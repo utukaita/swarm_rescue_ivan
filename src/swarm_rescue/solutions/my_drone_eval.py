@@ -213,7 +213,7 @@ class MyDroneEval(DroneAbstract):
                          display_lidar_graph=False,
                          **kwargs)
         # The state is initialized to searching wounded person
-        self.state = self.Activity.SEARCHING_WOUNDED
+        self.state = self.Activity.EXPLORING
 
         # Those values are used by the random control function
         self.counterStraight = 0
@@ -385,7 +385,7 @@ class MyDroneEval(DroneAbstract):
         best_angle = 0
 
         found_wounded = False
-        if (self.state is self.EXPLORING
+        if (self.state is self.Activity.EXPLORING
             or self.state is self.Activity.SEARCHING_WOUNDED
             or self.state is self.Activity.GRASPING_WOUNDED) \
                 and detection_semantic is not None:
