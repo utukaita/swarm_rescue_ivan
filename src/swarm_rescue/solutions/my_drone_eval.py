@@ -207,6 +207,21 @@ class MyDroneEval(DroneAbstract):
         SEARCHING_RESCUE_CENTER = 3
         DROPPING_AT_RESCUE_CENTER = 4
 
+    # to calculate map
+    OCCUPIED_CERTAINTY_THRESHOLD = 0.99 # probability of being occupied (99% occupied)
+    FREE_CERTAINTY_THRESHOLD = 1 - OCCUPIED_CERTAINTY_THRESHOLD # probablity of not being occupied (99% free = 1% occupied)
+    GRID_OCCUPIED_THRESHOLD = math.log(OCCUPIED_CERTAINTY_THRESHOLD) - math.log(1 - OCCUPIED_CERTAINTY_THRESHOLD) # using log-odds probability
+    GRID_FREE_THRESHOLD = -GRID_OCCUPIED_THRESHOLD
+
+    # to calculate utility
+    NUM_REGIONS = 5
+
+    # to calculate distance
+    DISTANCE_THRESHOLD = 10
+
+    # to calculate speed
+    MAX_SPEED = 1
+
     def __init__(self,
                  identifier: Optional[int] = None, **kwargs):
         super().__init__(identifier=identifier,
@@ -228,6 +243,8 @@ class MyDroneEval(DroneAbstract):
         self.grid = OccupancyGrid(size_area_world=self.size_area,
                                   resolution=resolution,
                                   lidar=self.lidar())
+        
+        self.target = None
 
     def define_message_for_all(self):
         """
@@ -275,10 +292,10 @@ class MyDroneEval(DroneAbstract):
               not found_rescue_center):
             self.state = self.Activity.SEARCHING_RESCUE_CENTER
 
-        print("state: {}, can_grasp: {}, grasped entities: {}"
-              .format(self.state.name,
-                      self.base.grasper.can_grasp,
-                      self.base.grasper.grasped_entities))
+        # print("state: {}, can_grasp: {}, grasped entities: {}"
+        #       .format(self.state.name,
+        #               self.base.grasper.can_grasp,
+        #               self.base.grasper.grasped_entities))
 
         ##########
         # COMMANDS FOR EACH STATE
@@ -286,11 +303,11 @@ class MyDroneEval(DroneAbstract):
         # detected, we use a special command
         ##########
         if self.state is self.Activity.EXPLORING:
-            command = self.control_random()
+            command = self.control_explore()
             command["grasper"] = 0
 
         if self.state is self.Activity.SEARCHING_WOUNDED:
-            command = self.control_random()
+            command = self.control_explore()
             command["grasper"] = 0
 
         elif self.state is self.Activity.GRASPING_WOUNDED:
@@ -298,7 +315,7 @@ class MyDroneEval(DroneAbstract):
             command["grasper"] = 1
 
         elif self.state is self.Activity.SEARCHING_RESCUE_CENTER:
-            command = self.control_random()
+            command = self.control_explore()
             command["grasper"] = 1
 
         elif self.state is self.Activity.DROPPING_AT_RESCUE_CENTER:
@@ -315,9 +332,9 @@ class MyDroneEval(DroneAbstract):
 
         self.grid.update_grid(pose=self.estimated_pose)
         if self.iteration % 5 == 0:
-            self.grid.display(self.grid.grid,
-                                  self.estimated_pose,
-                                  title="occupancy grid")
+            # self.grid.display(self.grid.grid,
+            #                       self.estimated_pose,
+            #                       title="occupancy grid")
             self.grid.display(self.grid.zoomed_grid,
                                   self.estimated_pose,
                                   title="zoomed occupancy grid")
@@ -341,35 +358,81 @@ class MyDroneEval(DroneAbstract):
 
         return collided
 
-    def control_random(self):
+    def control_explore(self):
         """
         The Drone will move forward and turn for a random angle when an
         obstacle is hit
         """
-        command_straight = {"forward": 0.5,
-                            "rotation": 0.0}
+        pos = self.grid._conv_world_to_grid(*self.measured_gps_position())
+        angle = self.measured_compass_angle()
+        forward = 0
+        rotation = 0
 
-        command_turn = {"forward": 0.0,
-                        "rotation": 1.0}
+        if self.target is None or np.linalg.norm(self.target-pos) < self.DISTANCE_THRESHOLD:
+            # convert probabilities grid to binary grid
+            bin_grid = self.grid.grid.copy()
+            bin_grid[bin_grid <= self.GRID_FREE_THRESHOLD] = 0  # free
+            bin_grid[bin_grid >= self.GRID_OCCUPIED_THRESHOLD] = 1  # occupied
+            frontier = np.logical_and(bin_grid != 1, bin_grid != 0) # not explored yet as not sure if free or occupied
+            frontier_indices = np.nonzero(frontier)
+            
+            rand_point = random.choice(np.column_stack(frontier_indices))
+            self.target = rand_point
+            print(" NEW TARGET \n\n\n")
+            print(f"target {self.target}")
 
-        collided = self.process_lidar_sensor()
-
-        self.counterStraight += 1
-
-        if collided and not self.isTurning and self.counterStraight > 100:
-            self.isTurning = True
-            self.angleStopTurning = random.uniform(-math.pi, math.pi)
-
-        diff_angle = normalize_angle(
-            self.angleStopTurning - self.measured_compass_angle())
-        if self.isTurning and abs(diff_angle) < 0.2:
-            self.isTurning = False
-            self.counterStraight = 0
-
-        if self.isTurning:
-            return command_turn
         else:
-            return command_straight
+            # Calculate target vector
+            target_vector = self.target - pos
+            
+            # Target angle and angular error
+            theta_t = np.arctan2(*target_vector)
+            delta_theta = (theta_t - angle + np.pi) % (2 * np.pi) - np.pi
+            
+            # Distance to the target
+            distance = np.linalg.norm(target_vector)
+            
+            # Control parameters
+            k_angular = 1.0
+            k_forward = 0.5
+            epsilon = 0.1  # Angular error threshold for moving forward
+            
+            # Compute actuator values
+            rotation = np.clip(k_angular * delta_theta, -1, 1)
+            forward = np.clip(k_forward * distance, -1, 1) if abs(delta_theta) < epsilon else 0
+            lateral_controller = 0  # No lateral movement
+    
+        return {"forward": forward,
+                "rotation": rotation}
+
+        #     target = rand_point
+        #     pos_u = pos / np.linalg.norm(pos)
+        #     target_u = target / np.linalg.norm(target)
+        #     target_angle = np.arccos(np.clip(np.dot(pos_u, target_u), -1.0, 1.0))
+
+        #     self.target = target
+        #     self.target_u = target_u
+        #     self.target_angle = target_angle
+
+
+        # else:
+        #     pos_u = pos / np.linalg.norm(pos)
+        #     target_vector = self.target - pos
+        #     target_angle = np.arctan2(target_vector[1], target_vector[0])  # (dy, dx)
+
+        #     rotation = target_angle / 10 * np.pi
+        #     forward = min(np.linalg.norm(self.target - pos) / 50, self.MAX_SPEED)
+        
+        # command = {"forward": forward,
+        #            "rotation": rotation}
+
+        # # command = {"forward": forward,
+        # #            "rotation": rotation}
+        # # if self.iteration % 75 == 0:
+        # #     np.savetxt('test.txt', frontier, fmt='%d')
+        # #     print(0/0)
+
+        # return command
 
     def process_semantic_sensor(self):
         """
