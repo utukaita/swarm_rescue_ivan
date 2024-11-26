@@ -3,7 +3,6 @@ This program can be launched directly.
 To move the drone, you have to click on the map, then use the arrows on the
 keyboard
 """
-
 import sys
 from pathlib import Path
 from typing import Type
@@ -22,10 +21,15 @@ from spg_overlay.gui_map.gui_sr import GuiSR
 from spg_overlay.gui_map.map_abstract import MapAbstract
 from spg_overlay.utils.misc_data import MiscData
 
+from spg_overlay.utils.pose import Pose
+import numpy as np
+import math
+
 
 class MyDroneGpsDisabler(DroneAbstract):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.estimated_pose = Pose()
 
     def define_message_for_all(self):
         """
@@ -40,6 +44,31 @@ class MyDroneGpsDisabler(DroneAbstract):
         """
         We only send a command to do nothing
         """
+        if isinstance(self.measured_gps_position(), np.ndarray):
+            self.estimated_pose = Pose(np.asarray(self.measured_gps_position()),
+                                       self.measured_compass_angle())
+            print(f"orient: {self.estimated_pose.orientation}")
+
+        else:
+            dist, alpha, theta = (0.0, 0.0, 0.0)
+            if not self.odometer_is_disabled():
+                dist, alpha, theta = tuple(self.odometer_values())
+            x, y = self.estimated_pose.position
+            orient = self.estimated_pose.orientation
+            print(f"theta: {theta}")
+            print(f"orient: {self.estimated_pose.orientation}")
+            print(f"cos: {math.cos(orient)}")
+            """print(math.cos(alpha+orient))
+            print(math.sin(alpha+orient))
+            print(theta)"""
+            new_x = x + dist * math.cos(alpha + orient)
+            new_y = y + dist * math.sin(alpha + orient)
+            new_orient = orient + theta
+            print(f"new_orient: {new_orient} = {orient} + {theta}")
+            self.estimated_pose = Pose(np.asarray([new_x, new_y], new_orient))
+
+        #print(f"Calculated position: {self.estimated_pose.position}, calculated orientation: {self.estimated_pose.orientation}")
+        #print(f"True position: {self.true_position()}, true orientation: {self.true_angle()}")
         command = {"forward": 0.0,
                    "lateral": 0.0,
                    "rotation": 0.0,
