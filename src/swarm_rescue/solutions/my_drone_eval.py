@@ -231,6 +231,9 @@ class MyDroneEval(DroneAbstract):
         # The state is initialized to searching wounded person
         self.state = self.Activity.EXPLORING
 
+        # Values associated with movement in general
+        self.speed = self.MAX_SPEED
+
         # Those values are used by the random control function
         self.counterStraight = 0
         self.angleStopTurning = 0
@@ -330,6 +333,23 @@ class MyDroneEval(DroneAbstract):
                                    self.measured_compass_angle())
         # self.estimated_pose = Pose(np.asarray(self.true_position()),
         #                            self.true_angle())
+        if isinstance(self.measured_gps_position(), np.ndarray):
+            self.estimated_pose = Pose(np.asarray(self.measured_gps_position()),
+                                       self.measured_compass_angle())
+            self.speed = self.MAX_SPEED
+
+        else:
+            dist, alpha, theta = (0.0, 0.0, 0.0)
+            if not self.odometer_is_disabled():
+                dist, alpha, theta = tuple(self.odometer_values())
+            x, y = self.estimated_pose.position
+            orient = self.estimated_pose.orientation
+            new_x = x + dist * math.cos(alpha + orient)
+            new_y = y + dist * math.sin(alpha + orient)
+            new_orient = orient + theta
+            self.estimated_pose.position = new_x, new_y
+            self.estimated_pose.orientation = new_orient
+            self.speed = self.MAX_SPEED/2
 
         self.grid.update_grid(pose=self.estimated_pose)
         if self.iteration % 5 == 0:
@@ -423,7 +443,7 @@ class MyDroneEval(DroneAbstract):
         #     target_angle = np.arctan2(target_vector[1], target_vector[0])  # (dy, dx)
 
         #     rotation = target_angle / 10 * np.pi
-        #     forward = min(np.linalg.norm(self.target - pos) / 50, self.MAX_SPEED)
+        #     forward = min(np.linalg.norm(self.target - pos) / 50, self.speed)
 
         # command = {"forward": forward,
         #            "rotation": rotation}

@@ -55,20 +55,15 @@ class MyDroneGpsDisabler(DroneAbstract):
                 dist, alpha, theta = tuple(self.odometer_values())
             x, y = self.estimated_pose.position
             orient = self.estimated_pose.orientation
-            print(f"theta: {theta}")
-            print(f"orient: {self.estimated_pose.orientation}")
-            print(f"cos: {math.cos(orient)}")
-            """print(math.cos(alpha+orient))
-            print(math.sin(alpha+orient))
-            print(theta)"""
             new_x = x + dist * math.cos(alpha + orient)
             new_y = y + dist * math.sin(alpha + orient)
             new_orient = orient + theta
-            print(f"new_orient: {new_orient} = {orient} + {theta}")
-            self.estimated_pose = Pose(np.asarray([new_x, new_y], new_orient))
+            self.estimated_pose.position = new_x, new_y
+            self.estimated_pose.orientation = new_orient
+            self.speed = 10
 
-        #print(f"Calculated position: {self.estimated_pose.position}, calculated orientation: {self.estimated_pose.orientation}")
-        #print(f"True position: {self.true_position()}, true orientation: {self.true_angle()}")
+        print(f"Calculated position: {self.estimated_pose.position}, calculated orientation: {self.estimated_pose.orientation}")
+        print(f"True position: {self.true_position()}, true orientation: {self.true_angle()}")
         command = {"forward": 0.0,
                    "lateral": 0.0,
                    "rotation": 0.0,
