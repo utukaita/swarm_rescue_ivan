@@ -26,14 +26,14 @@ class SemanticGrid(Grid):
     def __init__(self,
                  size_area_world,
                  resolution: float,
-                 semantic_sensor): #semantic sensor
+                 semantic_sensor):  # semantic sensor
         super().__init__(size_area_world=size_area_world,
                          resolution=resolution)
 
         self.size_area_world = size_area_world
         self.resolution = resolution
 
-        self.semantic_sensor = semantic_sensor # Semantic sensor instead
+        self.semantic_sensor = semantic_sensor  # Semantic sensor instead
 
         self.x_max_grid: int = int(self.size_area_world[0] / self.resolution
                                    + 0.5)
@@ -208,9 +208,10 @@ class MyDroneEval(DroneAbstract):
         DROPPING_AT_RESCUE_CENTER = 4
 
     # to calculate map
-    OCCUPIED_CERTAINTY_THRESHOLD = 0.99 # probability of being occupied (99% occupied)
-    FREE_CERTAINTY_THRESHOLD = 1 - OCCUPIED_CERTAINTY_THRESHOLD # probablity of not being occupied (99% free = 1% occupied)
-    GRID_OCCUPIED_THRESHOLD = math.log(OCCUPIED_CERTAINTY_THRESHOLD) - math.log(1 - OCCUPIED_CERTAINTY_THRESHOLD) # using log-odds probability
+    OCCUPIED_CERTAINTY_THRESHOLD = 0.99  # probability of being occupied (99% occupied)
+    FREE_CERTAINTY_THRESHOLD = 1 - OCCUPIED_CERTAINTY_THRESHOLD  # probablity of not being occupied (99% free = 1% occupied)
+    GRID_OCCUPIED_THRESHOLD = math.log(OCCUPIED_CERTAINTY_THRESHOLD) - math.log(
+        1 - OCCUPIED_CERTAINTY_THRESHOLD)  # using log-odds probability
     GRID_FREE_THRESHOLD = -GRID_OCCUPIED_THRESHOLD
 
     # to calculate utility
@@ -243,7 +244,7 @@ class MyDroneEval(DroneAbstract):
         self.grid = OccupancyGrid(size_area_world=self.size_area,
                                   resolution=resolution,
                                   lidar=self.lidar())
-        
+
         self.target = None
 
     def define_message_for_all(self):
@@ -326,7 +327,7 @@ class MyDroneEval(DroneAbstract):
         self.iteration += 1
 
         self.estimated_pose = Pose(np.asarray(self.measured_gps_position()),
-                                       self.measured_compass_angle())
+                                   self.measured_compass_angle())
         # self.estimated_pose = Pose(np.asarray(self.true_position()),
         #                            self.true_angle())
 
@@ -336,9 +337,9 @@ class MyDroneEval(DroneAbstract):
             #                       self.estimated_pose,
             #                       title="occupancy grid")
             self.grid.display(self.grid.zoomed_grid,
-                                  self.estimated_pose,
-                                  title="zoomed occupancy grid")
-                # pass
+                              self.estimated_pose,
+                              title="zoomed occupancy grid")
+            # pass
         # Update semantics on the map
 
         return command
@@ -368,15 +369,17 @@ class MyDroneEval(DroneAbstract):
         forward = 0
         rotation = 0
 
-        if self.target is None or np.linalg.norm(self.target-pos) < self.DISTANCE_THRESHOLD:
+        if self.target is None or np.linalg.norm(self.target - pos) < self.DISTANCE_THRESHOLD:
             # convert probabilities grid to binary grid
             bin_grid = self.grid.grid.copy()
             bin_grid[bin_grid <= self.GRID_FREE_THRESHOLD] = 0  # free
             bin_grid[bin_grid >= self.GRID_OCCUPIED_THRESHOLD] = 1  # occupied
-            frontier = np.logical_and(bin_grid != 1, bin_grid != 0) # not explored yet as not sure if free or occupied
+            frontier = np.logical_and(bin_grid != 1, bin_grid != 0)  # not explored yet as not sure if free or occupied
             frontier_indices = np.nonzero(frontier)
-            
+
             rand_point = random.choice(np.column_stack(frontier_indices))
+            rand_point[0] -= bin_grid.shape[1]/2
+            rand_point[1] -= bin_grid.shape[0]/2
             self.target = rand_point
             print(" NEW TARGET \n\n\n")
             print(f"target {self.target}")
@@ -384,24 +387,24 @@ class MyDroneEval(DroneAbstract):
         else:
             # Calculate target vector
             target_vector = self.target - pos
-            
+
             # Target angle and angular error
             theta_t = np.arctan2(*target_vector)
             delta_theta = (theta_t - angle + np.pi) % (2 * np.pi) - np.pi
-            
+
             # Distance to the target
             distance = np.linalg.norm(target_vector)
-            
+
             # Control parameters
             k_angular = 1.0
             k_forward = 0.5
             epsilon = 0.1  # Angular error threshold for moving forward
-            
+
             # Compute actuator values
             rotation = np.clip(k_angular * delta_theta, -1, 1)
             forward = np.clip(k_forward * distance, -1, 1) if abs(delta_theta) < epsilon else 0
             lateral_controller = 0  # No lateral movement
-    
+
         return {"forward": forward,
                 "rotation": rotation}
 
@@ -414,7 +417,6 @@ class MyDroneEval(DroneAbstract):
         #     self.target_u = target_u
         #     self.target_angle = target_angle
 
-
         # else:
         #     pos_u = pos / np.linalg.norm(pos)
         #     target_vector = self.target - pos
@@ -422,7 +424,7 @@ class MyDroneEval(DroneAbstract):
 
         #     rotation = target_angle / 10 * np.pi
         #     forward = min(np.linalg.norm(self.target - pos) / 50, self.MAX_SPEED)
-        
+
         # command = {"forward": forward,
         #            "rotation": rotation}
 
@@ -457,7 +459,7 @@ class MyDroneEval(DroneAbstract):
                 # If the wounded person detected is held by nobody
                 if (data.entity_type ==
                         DroneSemanticSensor.TypeEntity.WOUNDED_PERSON and
-                        not data.grasped): # And not grasped by another drone
+                        not data.grasped):  # And not grasped by another drone
                     found_wounded = True
                     v = (data.angle * data.angle) + \
                         (data.distance * data.distance / 10 ** 5)
