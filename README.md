@@ -1,3 +1,13 @@
+# Swarm Rescue Project
+This is our entry to the Swarm Rescue competition organized by the French military and connected schools. Our code is mostly in `src/swarm_rescue/solutions/my_drone_eval.py`. Find below the presentation of the competition.
+
+-----------------------------------------------------------------------------------------
+
+
+
+
+
+
 # Table of Content
 
 - [Welcome to *Swarm-Rescue*](#welcome-to-swarm-rescue)
